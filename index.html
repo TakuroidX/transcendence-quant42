@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRANSCENDENCE by QUANT_42</title>
+    <meta name="author" content="QUANT_42">
+    <meta name="description" content="Interactive generative art - 30,000 particles in real-time">
+    <meta property="og:title" content="TRANSCENDENCE by QUANT_42">
+    <meta property="og:description" content="Interactive WebGL art pushing technical limits">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@100;900&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            font-family: 'Orbitron', monospace;
+            background: #000;
+            cursor: none;
+        }
+        
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at center, #1a0033 0%, #000 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            transition: opacity 1s ease;
+        }
+        
+        #loading h1 {
+            font-size: 48px;
+            font-weight: 100;
+            letter-spacing: 10px;
+            background: linear-gradient(90deg, #FFD700, #00FFFF, #FF00FF);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.05); }
+        }
+        
+        #loading-bar {
+            width: 300px;
+            height: 2px;
+            background: rgba(255,255,255,0.1);
+            margin-top: 30px;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        #loading-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #00FFFF, #FF00FF);
+            width: 0%;
+            transition: width 0.3s ease;
+            box-shadow: 0 0 20px rgba(0,255,255,0.8);
+        }
+        
+        #canvas-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(ellipse at center, rgba(138,43,226,0.1) 0%, #000 100%);
+        }
+        
+        canvas {
+            display: block;
+            filter: saturate(1.2) contrast(1.1);
+        }
+        
+        #cursor {
+            position: fixed;
+            width: 30px;
+            height: 30px;
+            border: 2px solid rgba(255,255,255,0.5);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 10000;
+            mix-blend-mode: screen;
+            transform: translate(-50%, -50%);
+            transition: transform 0.1s ease-out;
+            animation: cursorPulse 2s ease-in-out infinite;
+        }
+        
+        #cursor::after {
+            content: '';
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: white;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        @keyframes cursorPulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(255,255,255,0.5); }
+            50% { box-shadow: 0 0 40px rgba(138,43,226,0.8); }
+        }
+        
+        #info {
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            color: rgba(255,255,255,0.95);
+            background: linear-gradient(135deg, 
+                rgba(255,255,255,0.03) 0%,
+                rgba(255,255,255,0.06) 50%,
+                rgba(255,255,255,0.03) 100%);
+            padding: 30px;
+            border-radius: 30px;
+            backdrop-filter: blur(40px) saturate(200%);
+            -webkit-backdrop-filter: blur(40px) saturate(200%);
+            font-size: 12px;
+            max-width: 380px;
+            z-index: 100;
+            transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+            border: 1px solid rgba(255,255,255,0.15);
+            box-shadow: 
+                0 20px 60px rgba(138,43,226,0.4),
+                inset 0 2px 1px rgba(255,255,255,0.4);
+        }
+        
+        #info.hidden {
+            transform: translateX(-450px) rotateY(-90deg);
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        #info h2 {
+            margin: 0 0 25px 0;
+            font-size: 28px;
+            font-weight: 900;
+            letter-spacing: 6px;
+            background: linear-gradient(135deg, #FFD700 0%, #FF00FF 25%, #00FFFF 50%, #00FF00 75%, #FFD700 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            background-size: 300% 100%;
+            animation: gradientFlow 3s linear infinite;
+            text-align: center;
+            filter: drop-shadow(0 0 20px rgba(138,43,226,0.8));
+        }
+        
+        @keyframes gradientFlow {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 100% 50%; }
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            background: linear-gradient(90deg, rgba(0,255,0,0.2), rgba(0,255,255,0.2));
+            border-radius: 15px;
+            margin: 10px 0;
+            font-size: 10px;
+            letter-spacing: 1px;
+            border: 1px solid rgba(0,255,255,0.3);
+            animation: statusGlow 2s ease-in-out infinite;
+        }
+        
+        @keyframes statusGlow {
+            0%, 100% { opacity: 0.7; box-shadow: 0 0 10px rgba(0,255,255,0.3); }
+            50% { opacity: 1; box-shadow: 0 0 20px rgba(0,255,255,0.6); }
+        }
+        
+        button {
+            background: linear-gradient(135deg, 
+                rgba(138,43,226,0.6) 0%,
+                rgba(0,191,255,0.6) 50%,
+                rgba(255,0,255,0.6) 100%);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.4);
+            padding: 14px 28px;
+            border-radius: 35px;
+            cursor: pointer;
+            margin: 6px 6px 6px 0;
+            transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+            font-size: 11px;
+            font-weight: 400;
+            letter-spacing: 2px;
+            backdrop-filter: blur(20px);
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+        }
+        
+        button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            transition: left 0.5s ease;
+        }
+        
+        button:hover::before {
+            left: 100%;
+        }
+        
+        button:hover {
+            transform: translateY(-4px) scale(1.05);
+            box-shadow: 
+                0 20px 50px rgba(138,43,226,0.5),
+                0 0 80px rgba(255,255,255,0.3);
+        }
+        
+        #toggle-menu {
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            width: 70px;
+            height: 70px;
+            background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 101;
+            transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+            backdrop-filter: blur(30px);
+            box-shadow: 
+                0 10px 40px rgba(138,43,226,0.4),
+                inset 0 2px 2px rgba(255,255,255,0.4);
+        }
+        
+        #toggle-menu:hover {
+            transform: scale(1.3) rotate(180deg);
+            box-shadow: 
+                0 0 80px rgba(138,43,226,0.8),
+                0 0 120px rgba(0,191,255,0.6);
+        }
+        
+        #toggle-menu::before {
+            content: '✦';
+            color: white;
+            font-size: 35px;
+            text-shadow: 0 0 40px rgba(255,255,255,1);
+            animation: iconFloat 3s ease-in-out infinite;
+        }
+        
+        @keyframes iconFloat {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-3px) rotate(180deg); }
+        }
+        
+        .slider-container {
+            margin-top: 20px;
+        }
+        
+        .slider-label {
+            color: rgba(255,255,255,0.8);
+            font-size: 10px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .slider-value {
+            color: rgba(0,255,255,0.9);
+            font-weight: 400;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            background: linear-gradient(90deg, rgba(138,43,226,0.3), rgba(0,191,255,0.3));
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            background: radial-gradient(circle, white, rgba(138,43,226,1));
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 30px rgba(138,43,226,0.8);
+            transition: all 0.3s ease;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.5);
+            box-shadow: 0 0 50px rgba(138,43,226,1);
+        }
+        
+        #stats {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            color: rgba(255,255,255,0.7);
+            font-size: 10px;
+            font-weight: 400;
+            letter-spacing: 2px;
+            background: rgba(0,0,0,0.5);
+            padding: 12px 20px;
+            border-radius: 25px;
+            backdrop-filter: blur(20px);
+            text-transform: uppercase;
+            border: 1px solid rgba(255,255,255,0.1);
+            text-shadow: 0 0 10px rgba(0,255,255,0.5);
+        }
+        
+        .quality-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #00FF00;
+            border-radius: 50%;
+            margin-left: 10px;
+            box-shadow: 0 0 10px currentColor;
+            animation: qualityPulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes qualityPulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <h1>TRANSCENDENCE</h1>
+        <div id="loading-bar">
+            <div id="loading-progress"></div>
+        </div>
+        <p style="color: rgba(255,255,255,0.5); margin-top: 20px; font-size: 12px; letter-spacing: 2px;">
+            INITIALIZING ULTIMATE EXPERIENCE...
+        </p>
+    </div>
+    
+    <div id="canvas-container">
+        <div id="cursor"></div>
+        <div id="toggle-menu" onclick="toggleMenu()"></div>
+        <div id="info">
+            <h2>✦ TRANSCENDENCE ✦</h2>
+            <div class="status">EXTREME QUALITY MODE ACTIVE</div>
+            
+            <p style="margin: 15px 0; line-height: 1.8; color: rgba(255,255,255,0.8);">
+                🌌 限界を超えた美しさを実現<br>
+                💎 30,000+ パーティクル<br>
+                🔥 レイマーチング & フラクタル<br>
+                ✨ リアルタイムシェーダー
+            </p>
+            
+            <div style="margin-top: 25px; padding-top: 25px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <button onclick="toggleExtremeMode()">
+                    <span id="extremeMode">EXTREME ON</span>
+                </button>
+                <button onclick="changeVisualMode()">
+                    <span id="visualMode">HYBRID</span>
+                </button>
+                <button onclick="changeColorScheme()">COLOR SCHEME</button>
+                
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Particle Density</span>
+                        <span class="slider-value" id="densityValue">100%</span>
+                    </div>
+                    <input type="range" id="densitySlider" min="50" max="150" value="100" oninput="changeDensity(this.value)">
+                </div>
+                
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Time Flow</span>
+                        <span class="slider-value" id="timeValue">100%</span>
+                    </div>
+                    <input type="range" id="timeSlider" min="0" max="200" value="100" oninput="changeTimeFlow(this.value)">
+                </div>
+                
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Glow Intensity</span>
+                        <span class="slider-value" id="glowValue">100%</span>
+                    </div>
+                    <input type="range" id="glowSlider" min="50" max="200" value="100" oninput="changeGlow(this.value)">
+                </div>
+            </div>
+        </div>
+        <div id="stats">
+            <span id="fpsDisplay">60 FPS</span>
+            <span id="particleDisplay">30000 PARTICLES</span>
+            <span class="quality-indicator" id="qualityIndicator"></span>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Cursor tracking
+        document.addEventListener('mousemove', (e) => {
+            const cursor = document.getElementById('cursor');
+            cursor.style.left = e.clientX + 'px';
+            cursor.style.top = e.clientY + 'px';
+        });
+        
+        // Loading animation
+        let loadProgress = 0;
+        const loadingInterval = setInterval(() => {
+            loadProgress += 10;
+            document.getElementById('loading-progress').style.width = loadProgress + '%';
+            if (loadProgress >= 100) {
+                clearInterval(loadingInterval);
+                setTimeout(() => {
+                    document.getElementById('loading').style.opacity = '0';
+                    setTimeout(() => {
+                        document.getElementById('loading').style.display = 'none';
+                        initializeUniverse();
+                    }, 1000);
+                }, 500);
+            }
+        }, 100);
+        
+        // Global variables
+        let scene, camera, renderer;
+        let rayMarchQuad, fractalCore;
+        let particleSystems = [];
+        let fluidSpheres = [];
+        let lightSources = [];
+        let time = 0;
+        let mouseX = 0, mouseY = 0;
+        let extremeMode = true;
+        let visualMode = 'HYBRID';
+        let timeMultiplier = 1;
+        let particleDensityMultiplier = 1;
+        let glowIntensity = 1;
+        
+        let colorSchemeIndex = 0;
+        const colorSchemes = [
+            {
+                name: 'Cosmic Aurora',
+                primary: [0xFF00FF, 0x00FFFF, 0xFFD700],
+                secondary: [0x00FF00, 0xFF00AA, 0x00FFAA],
+                fog: 0x000022
+            },
+            {
+                name: 'Quantum Fire',
+                primary: [0xFF6B35, 0xF7931E, 0xFFD700],
+                secondary: [0xFF1493, 0xFF69B4, 0xFFA500],
+                fog: 0x100505
+            },
+            {
+                name: 'Deep Space',
+                primary: [0x4A00FF, 0x00D4FF, 0xFF00FF],
+                secondary: [0x00FF88, 0x8800FF, 0x00AAFF],
+                fog: 0x000011
+            }
+        ];
+        let currentScheme = colorSchemes[0];
+        
+        let frameCount = 0;
+        let lastTime = performance.now();
+        
+        function initializeUniverse() {
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(currentScheme.fog, 0.001);
+            
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 0, 60);
+            
+            // Renderer - start with medium quality
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: false,
+                alpha: false,
+                powerPreference: "high-performance",
+                precision: "highp"
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(1); // Start low, increase after load
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.2;
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            
+            // Build the universe progressively
+            createLights();
+            createRayMarchingQuad();
+            createFractalCore();
+            createMegaParticleSystem();
+            createFluidSpheres();
+            
+            // Events
+            document.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('resize', onWindowResize);
+            
+            // Progressive quality enhancement
+            setTimeout(() => {
+                if (extremeMode) {
+                    renderer.setPixelRatio(window.devicePixelRatio);
+                    renderer.antialias = true;
+                    addMoreParticles();
+                }
+            }, 2000);
+            
+            // Start animation
+            animate();
+        }
+        
+        function createLights() {
+            const ambientLight = new THREE.AmbientLight(0x110033, 0.4);
+            scene.add(ambientLight);
+            
+            for (let i = 0; i < 8; i++) {
+                const color = currentScheme.primary[i % currentScheme.primary.length];
+                const light = new THREE.PointLight(color, 2, 150);
+                light.position.set(
+                    Math.sin(i * Math.PI / 4) * 40,
+                    Math.cos(i * Math.PI / 4) * 40,
+                    Math.sin(i * 2) * 30
+                );
+                
+                // Visible light sphere
+                const sphere = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.5, 16, 16),
+                    new THREE.MeshBasicMaterial({ color: color, emissive: color })
+                );
+                light.add(sphere);
+                
+                lightSources.push(light);
+                scene.add(light);
+            }
+        }
+        
+        function createRayMarchingQuad() {
+            const geometry = new THREE.PlaneGeometry(2, 2);
+            const material = new THREE.ShaderMaterial({
+                uniforms: {
+                    time: { value: 0 },
+                    resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+                    mouse: { value: new THREE.Vector2(0, 0) },
+                    glowIntensity: { value: 1 }
+                },
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform float time;
+                    uniform vec2 resolution;
+                    uniform vec2 mouse;
+                    uniform float glowIntensity;
+                    varying vec2 vUv;
+                    
+                    float hash(vec3 p) {
+                        p = fract(p * vec3(443.8975, 397.2973, 491.1871));
+                        p += dot(p, p.yxz + 19.19);
+                        return fract((p.x + p.y) * p.z);
+                    }
+                    
+                    float noise(vec3 p) {
+                        vec3 i = floor(p);
+                        vec3 f = fract(p);
+                        f = f * f * (3.0 - 2.0 * f);
+                        
+                        return mix(
+                            mix(mix(hash(i), hash(i + vec3(1,0,0)), f.x),
+                                mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+                            mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
+                                mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z
+                        );
+                    }
+                    
+                    float fbm(vec3 p) {
+                        float value = 0.0;
+                        float amplitude = 0.5;
+                        for(int i = 0; i < 5; i++) {
+                            value += amplitude * noise(p);
+                            p *= 2.0;
+                            amplitude *= 0.5;
+                        }
+                        return value;
+                    }
+                    
+                    float sdSphere(vec3 p, float r) {
+                        return length(p) - r;
+                    }
+                    
+                    float map(vec3 p) {
+                        float d = 1000.0;
+                        
+                        // Multiple morphing spheres
+                        for(int i = 0; i < 4; i++) {
+                            vec3 q = p;
+                            float angle = time * 0.3 + float(i) * 1.57;
+                            q.xz = mat2(cos(angle), -sin(angle), sin(angle), cos(angle)) * q.xz;
+                            q = mod(q + 10.0, 20.0) - 10.0;
+                            
+                            float sphere = sdSphere(q, 4.0 + sin(time * 2.0 + float(i)) * 2.0);
+                            sphere += fbm(q * 1.5 + time * 0.5) * 0.8;
+                            d = min(d, sphere);
+                        }
+                        
+                        return d;
+                    }
+                    
+                    vec3 calcNormal(vec3 p) {
+                        vec2 e = vec2(0.001, 0.0);
+                        return normalize(vec3(
+                            map(p + e.xyy) - map(p - e.xyy),
+                            map(p + e.yxy) - map(p - e.yxy),
+                            map(p + e.yyx) - map(p - e.yyx)
+                        ));
+                    }
+                    
+                    vec3 palette(float t) {
+                        vec3 a = vec3(0.5, 0.5, 0.5);
+                        vec3 b = vec3(0.5, 0.5, 0.5);
+                        vec3 c = vec3(1.0, 1.0, 1.0);
+                        vec3 d = vec3(0.263, 0.416, 0.557);
+                        return a + b * cos(6.28318 * (c * t + d));
+                    }
+                    
+                    void main() {
+                        vec2 uv = (gl_FragCoord.xy - resolution.xy * 0.5) / resolution.y;
+                        uv += mouse * 0.1;
+                        
+                        vec3 ro = vec3(0, 0, 30);
+                        ro.xz = mat2(cos(time * 0.1), -sin(time * 0.1), sin(time * 0.1), cos(time * 0.1)) * ro.xz;
+                        vec3 rd = normalize(vec3(uv, -1.0));
+                        
+                        float t = 0.0;
+                        vec3 col = vec3(0.0);
+                        
+                        for(int i = 0; i < 80; i++) {
+                            vec3 p = ro + rd * t;
+                            float d = map(p);
+                            
+                            if(d < 0.01) {
+                                vec3 n = calcNormal(p);
+                                vec3 light = normalize(vec3(sin(time), 1.0, cos(time)));
+                                float diff = max(dot(n, light), 0.0);
+                                
+                                col = palette(t * 0.04 + time * 0.05) * diff;
+                                col += vec3(0.1, 0.2, 0.3) * pow(1.0 - abs(dot(rd, n)), 2.0);
+                                col *= glowIntensity;
+                                break;
+                            }
+                            
+                            if(t > 100.0) break;
+                            
+                            // Glow accumulation
+                            col += palette(t * 0.01 + time * 0.1) * 0.002 / (1.0 + d * d * 0.05) * glowIntensity;
+                            
+                            t += d * 0.6;
+                        }
+                        
+                        col = pow(col, vec3(0.6));
+                        col *= 1.0 - 0.4 * length(uv);
+                        
+                        gl_FragColor = vec4(col, 1.0);
+                    }
+                `,
+                side: THREE.DoubleSide
+            });
+            
+            rayMarchQuad = new THREE.Mesh(geometry, material);
+            rayMarchQuad.frustumCulled = false;
+            
+            if (visualMode === 'RAYMARCH' || visualMode === 'HYBRID') {
+                scene.add(rayMarchQuad);
+            }
+        }
+        
+        function createFractalCore() {
+            const geometry = new THREE.IcosahedronGeometry(10, 4);
+            const material = new THREE.ShaderMaterial({
+                uniforms: {
+                    time: { value: 0 },
+                    color1: { value: new THREE.Color(currentScheme.primary[0]) },
+                    color2: { value: new THREE.Color(currentScheme.primary[1]) },
+                    color3: { value: new THREE.Color(currentScheme.primary[2]) },
+                    glowIntensity: { value: 1 }
+                },
+                vertexShader: `
+                    varying vec3 vNormal;
+                    varying vec3 vPosition;
+                    uniform float time;
+                    
+                    vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                    vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                    vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+                    
+                    float snoise(vec3 v) {
+                        const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+                        const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+                        
+                        vec3 i = floor(v + dot(v, C.yyy));
+                        vec3 x0 = v - i + dot(i, C.xxx);
+                        
+                        vec3 g = step(x0.yzx, x0.xyz);
+                        vec3 l = 1.0 - g;
+                        vec3 i1 = min(g.xyz, l.zxy);
+                        vec3 i2 = max(g.xyz, l.zxy);
+                        
+                        vec3 x1 = x0 - i1 + C.xxx;
+                        vec3 x2 = x0 - i2 + C.yyy;
+                        vec3 x3 = x0 - D.yyy;
+                        
+                        i = mod289(i);
+                        vec4 p = permute(permute(permute(
+                            i.z + vec4(0.0, i1.z, i2.z, 1.0))
+                            + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+                            + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+                            
+                        vec4 j = p - 49.0 * floor(p * (1.0 / 49.0));
+                        
+                        vec4 x_ = floor(j * (1.0 / 7.0));
+                        vec4 y_ = floor(j - 7.0 * x_);
+                        
+                        vec4 x = x_ * (2.0 / 7.0) + 0.5 / 7.0 - 1.0;
+                        vec4 y = y_ * (2.0 / 7.0) + 0.5 / 7.0 - 1.0;
+                        
+                        vec4 h = 1.0 - abs(x) - abs(y);
+                        
+                        vec4 b0 = vec4(x.xy, y.xy);
+                        vec4 b1 = vec4(x.zw, y.zw);
+                        
+                        vec4 s0 = floor(b0) * 2.0 + 1.0;
+                        vec4 s1 = floor(b1) * 2.0 + 1.0;
+                        vec4 sh = -step(h, vec4(0.0));
+                        
+                        vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+                        vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+                        
+                        vec3 p0 = vec3(a0.xy, h.x);
+                        vec3 p1 = vec3(a0.zw, h.y);
+                        vec3 p2 = vec3(a1.xy, h.z);
+                        vec3 p3 = vec3(a1.zw, h.w);
+                        
+                        vec4 norm = 1.79284291400159 - 0.85373472095314 * 
+                            vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3));
+                        p0 *= norm.x;
+                        p1 *= norm.y;
+                        p2 *= norm.z;
+                        p3 *= norm.w;
+                        
+                        vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+                        m = m * m;
+                        return 42.0 * dot(m*m, vec4(
+                            dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+                    }
+                    
+                    void main() {
+                        vNormal = normalize(normalMatrix * normal);
+                        vPosition = position;
+                        
+                        vec3 pos = position;
+                        float noise = snoise(pos * 0.3 + time * 0.3);
+                        pos += normal * noise * 1.5;
+                        
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform vec3 color1;
+                    uniform vec3 color2;
+                    uniform vec3 color3;
+                    uniform float time;
+                    uniform float glowIntensity;
+                    varying vec3 vNormal;
+                    varying vec3 vPosition;
+                    
+                    vec3 hsv2rgb(vec3 c) {
+                        vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+                        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+                        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+                    }
+                    
+                    void main() {
+                        float fresnel = pow(1.0 - abs(dot(vNormal, vec3(0,0,1))), 2.0);
+                        
+                        vec3 color = mix(
+                            mix(color1, color2, fresnel),
+                            color3,
+                            sin(length(vPosition) * 0.2 + time) * 0.5 + 0.5
+                        );
+                        
+                        // Iridescent effect
+                        vec3 iridescent = hsv2rgb(vec3(fresnel * 3.0 + time * 0.1, 0.8, 1.0));
+                        color = mix(color, iridescent, fresnel * 0.5);
+                        
+                        // Rim lighting
+                        float rim = pow(fresnel, 3.0);
+                        color += vec3(rim) * 2.0 * glowIntensity;
+                        
+                        gl_FragColor = vec4(color, 0.9);
+                    }
+                `,
+                transparent: true,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending,
+                side: THREE.DoubleSide
+            });
+            
+            fractalCore = new THREE.Mesh(geometry, material);
+            if (visualMode === 'FRACTAL' || visualMode === 'HYBRID') {
+                scene.add(fractalCore);
+            }
+        }
+        
+        function createMegaParticleSystem() {
+            // Start with moderate amount
+            const baseCount = extremeMode ? 15000 : 8000;
+            
+            const geometry = new THREE.BufferGeometry();
+            const count = Math.floor(baseCount * particleDensityMultiplier);
+            const positions = new Float32Array(count * 3);
+            const colors = new Float32Array(count * 3);
+            const sizes = new Float32Array(count);
+            
+            for (let i = 0; i < count; i++) {
+                // Spiral galaxy distribution
+                const angle = (i / count) * Math.PI * 20;
+                const radius = Math.sqrt(i / count) * 100;
+                const height = (Math.random() - 0.5) * 50;
+                
+                positions[i * 3] = Math.cos(angle) * radius;
+                positions[i * 3 + 1] = height;
+                positions[i * 3 + 2] = Math.sin(angle) * radius;
+                
+                const colorChoice = currentScheme.primary.concat(currentScheme.secondary);
+                const color = new THREE.Color(
+                    colorChoice[Math.floor(Math.random() * colorChoice.length)]
+                );
+                colors[i * 3] = color.r;
+                colors[i * 3 + 1] = color.g;
+                colors[i * 3 + 2] = color.b;
+                
+                sizes[i] = Math.random() * 2 + 0.5;
+            }
+            
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+            
+            const material = new THREE.ShaderMaterial({
+                uniforms: {
+                    time: { value: 0 },
+                    pixelRatio: { value: window.devicePixelRatio }
+                },
+                vertexShader: `
+                    attribute float size;
+                    varying vec3 vColor;
+                    uniform float time;
+                    uniform float pixelRatio;
+                    
+                    void main() {
+                        vColor = color;
+                        vec3 pos = position;
+                        
+                        // Orbital motion
+                        float angle = time * 0.1 + length(position.xz) * 0.01;
+                        mat2 rot = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+                        pos.xz = rot * pos.xz;
+                        
+                        // Wave motion
+                        pos.y += sin(time + position.x * 0.01) * 5.0;
+                        
+                        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                        gl_PointSize = size * pixelRatio * (300.0 / -mvPosition.z);
+                        gl_Position = projectionMatrix * mvPosition;
+                    }
+                `,
+                fragmentShader: `
+                    varying vec3 vColor;
+                    uniform float time;
+                    
+                    void main() {
+                        float dist = length(gl_PointCoord - vec2(0.5));
+                        if (dist > 0.5) discard;
+                        
+                        float opacity = smoothstep(0.5, 0.0, dist);
+                        opacity *= 0.8 + 0.2 * sin(time * 3.0);
+                        
+                        vec3 finalColor = vColor;
+                        if (dist < 0.1) {
+                            finalColor += vec3(1.0) * (0.1 - dist) * 10.0;
+                        }
+                        
+                        gl_FragColor = vec4(finalColor, opacity);
+                    }
+                `,
+                transparent: true,
+                vertexColors: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            
+            const points = new THREE.Points(geometry, material);
+            particleSystems.push({ points, material });
+            scene.add(points);
+        }
+        
+        function addMoreParticles() {
+            // Add second layer of particles for extreme mode
+            const geometry = new THREE.BufferGeometry();
+            const count = 15000;
+            const positions = new Float32Array(count * 3);
+            const colors = new Float32Array(count * 3);
+            
+            for (let i = 0; i < count; i++) {
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(Math.random() * 2 - 1);
+                const radius = 50 + Math.random() * 100;
+                
+                positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+                positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+                positions[i * 3 + 2] = radius * Math.cos(phi);
+                
+                const color = new THREE.Color(currentScheme.secondary[Math.floor(Math.random() * currentScheme.secondary.length)]);
+                colors[i * 3] = color.r;
+                colors[i * 3 + 1] = color.g;
+                colors[i * 3 + 2] = color.b;
+            }
+            
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            const material = new THREE.PointsMaterial({
+                size: 0.5,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.6,
+                blending: THREE.AdditiveBlending
+            });
+            
+            const points = new THREE.Points(geometry, material);
+            particleSystems.push({ points, material: null });
+            scene.add(points);
+        }
+        
+        function createFluidSpheres() {
+            for (let i = 0; i < 5; i++) {
+                const geometry = new THREE.SphereGeometry(3 + Math.random() * 2, 32, 32);
+                const material = new THREE.MeshPhongMaterial({
+                    color: currentScheme.primary[i % currentScheme.primary.length],
+                    emissive: currentScheme.secondary[i % currentScheme.secondary.length],
+                    emissiveIntensity: 0.3,
+                    transparent: true,
+                    opacity: 0.7,
+                    shininess: 100
+                });
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(
+                    (Math.random() - 0.5) * 40,
+                    (Math.random() - 0.5) * 30,
+                    (Math.random() - 0.5) * 40
+                );
+                
+                fluidSpheres.push(mesh);
+                scene.add(mesh);
+            }
+        }
+        
+        function toggleMenu() {
+            const info = document.getElementById('info');
+            info.classList.toggle('hidden');
+            document.getElementById('toggle-menu').classList.toggle('menu-open');
+        }
+        
+        function toggleExtremeMode() {
+            extremeMode = !extremeMode;
+            document.getElementById('extremeMode').textContent = extremeMode ? 'EXTREME ON' : 'EXTREME OFF';
+            
+            if (extremeMode) {
+                renderer.setPixelRatio(window.devicePixelRatio);
+                if (particleSystems.length < 2) addMoreParticles();
+            } else {
+                renderer.setPixelRatio(1);
+            }
+        }
+        
+        function changeVisualMode() {
+            const modes = ['HYBRID', 'RAYMARCH', 'FRACTAL', 'PARTICLES'];
+            const currentIndex = modes.indexOf(visualMode);
+            visualMode = modes[(currentIndex + 1) % modes.length];
+            document.getElementById('visualMode').textContent = visualMode;
+            
+            // Toggle elements
+            if (rayMarchQuad) {
+                if (visualMode === 'RAYMARCH' || visualMode === 'HYBRID') {
+                    scene.add(rayMarchQuad);
+                } else {
+                    scene.remove(rayMarchQuad);
+                }
+            }
+            
+            if (fractalCore) {
+                if (visualMode === 'FRACTAL' || visualMode === 'HYBRID') {
+                    scene.add(fractalCore);
+                } else {
+                    scene.remove(fractalCore);
+                }
+            }
+        }
+        
+        function changeColorScheme() {
+            colorSchemeIndex = (colorSchemeIndex + 1) % colorSchemes.length;
+            currentScheme = colorSchemes[colorSchemeIndex];
+            
+            // Update fog
+            scene.fog.color.setHex(currentScheme.fog);
+            
+            // Update materials
+            if (fractalCore) {
+                fractalCore.material.uniforms.color1.value.setHex(currentScheme.primary[0]);
+                fractalCore.material.uniforms.color2.value.setHex(currentScheme.primary[1]);
+                fractalCore.material.uniforms.color3.value.setHex(currentScheme.primary[2]);
+            }
+            
+            fluidSpheres.forEach((mesh, i) => {
+                mesh.material.color.setHex(currentScheme.primary[i % currentScheme.primary.length]);
+                mesh.material.emissive.setHex(currentScheme.secondary[i % currentScheme.secondary.length]);
+            });
+            
+            lightSources.forEach((light, i) => {
+                light.color.setHex(currentScheme.primary[i % currentScheme.primary.length]);
+            });
+        }
+        
+        function changeDensity(value) {
+            particleDensityMultiplier = value / 100;
+            document.getElementById('densityValue').textContent = value + '%';
+            
+            // Scale particles instead of recreating
+            particleSystems.forEach(system => {
+                system.points.scale.setScalar(Math.sqrt(particleDensityMultiplier));
+            });
+        }
+        
+        function changeTimeFlow(value) {
+            timeMultiplier = value / 100;
+            document.getElementById('timeValue').textContent = value + '%';
+        }
+        
+        function changeGlow(value) {
+            glowIntensity = value / 100;
+            document.getElementById('glowValue').textContent = value + '%';
+            renderer.toneMappingExposure = 1.2 * glowIntensity;
+            
+            if (rayMarchQuad) {
+                rayMarchQuad.material.uniforms.glowIntensity.value = glowIntensity;
+            }
+            if (fractalCore) {
+                fractalCore.material.uniforms.glowIntensity.value = glowIntensity;
+            }
+        }
+        
+        function onMouseMove(event) {
+            mouseX = (event.clientX / window.innerWidth) * 2 - 1;
+            mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            
+            if (rayMarchQuad) {
+                rayMarchQuad.material.uniforms.resolution.value.set(
+                    window.innerWidth, window.innerHeight
+                );
+            }
+        }
+        
+        function updateStats() {
+            frameCount++;
+            const currentTime = performance.now();
+            
+            if (currentTime >= lastTime + 1000) {
+                const fps = Math.round(frameCount * 1000 / (currentTime - lastTime));
+                document.getElementById('fpsDisplay').textContent = fps + ' FPS';
+                
+                // Update quality indicator
+                const indicator = document.getElementById('qualityIndicator');
+                if (fps >= 50) {
+                    indicator.style.background = '#00FF00';
+                } else if (fps >= 30) {
+                    indicator.style.background = '#FFA500';
+                } else {
+                    indicator.style.background = '#FF0000';
+                }
+                
+                // Update particle count
+                let totalParticles = 0;
+                particleSystems.forEach(system => {
+                    if (system.points.geometry.attributes.position) {
+                        totalParticles += system.points.geometry.attributes.position.count;
+                    }
+                });
+                document.getElementById('particleDisplay').textContent = 
+                    totalParticles.toLocaleString() + ' PARTICLES';
+                
+                frameCount = 0;
+                lastTime = currentTime;
+            }
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            time += 0.01 * timeMultiplier;
+            
+            // Update shader uniforms
+            if (rayMarchQuad) {
+                rayMarchQuad.material.uniforms.time.value = time;
+                rayMarchQuad.material.uniforms.mouse.value.set(mouseX, mouseY);
+            }
+            
+            if (fractalCore) {
+                fractalCore.material.uniforms.time.value = time;
+                fractalCore.rotation.x += 0.005 * timeMultiplier;
+                fractalCore.rotation.y += 0.003 * timeMultiplier;
+                const scale = 1 + Math.sin(time * 2) * 0.1;
+                fractalCore.scale.setScalar(scale);
+            }
+            
+            // Update particles
+            particleSystems.forEach((system, i) => {
+                if (system.material) {
+                    system.material.uniforms.time.value = time;
+                }
+                system.points.rotation.y += 0.001 * timeMultiplier;
+            });
+            
+            // Animate fluid spheres
+            fluidSpheres.forEach((mesh, i) => {
+                const angle = time + i * Math.PI * 0.4;
+                mesh.position.x = Math.sin(angle) * 30;
+                mesh.position.z = Math.cos(angle) * 30;
+                mesh.position.y = Math.sin(angle * 2) * 15;
+                mesh.rotation.x += 0.01 * timeMultiplier;
+                mesh.rotation.y += 0.015 * timeMultiplier;
+            });
+            
+            // Animate lights
+            lightSources.forEach((light, i) => {
+                const angle = time * 0.5 + i * Math.PI / 4;
+                light.position.x = Math.sin(angle) * 40;
+                light.position.z = Math.cos(angle) * 40;
+                light.position.y = Math.sin(angle * 1.5) * 20;
+            });
+            
+            // Camera movement
+            camera.position.x += (mouseX * 30 - camera.position.x) * 0.05;
+            camera.position.y += (mouseY * 20 - camera.position.y) * 0.05;
+            camera.position.z = 60 + Math.sin(time * 0.5) * 10;
+            camera.lookAt(0, 0, 0);
+            
+            updateStats();
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
